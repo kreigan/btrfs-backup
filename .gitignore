@@ -15,8 +15,8 @@
 go.work
 
 # Build output
-btrfs-backup
-btrfs-backup.exe
+/btrfs-backup
+/btrfs-backup.exe
 
 # Config files (may contain secrets)
 config.yaml

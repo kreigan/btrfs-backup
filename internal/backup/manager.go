@@ -1,4 +1,4 @@
-package main
+package backup
 
 import (
 	"fmt"
@@ -9,21 +9,23 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"btrfs-backup/internal/config"
 )
 
-type BackupManager struct {
-	config  *Config
+type Manager struct {
+	config  *config.Config
 	verbose bool
 }
 
-func NewBackupManager(config *Config, verbose bool) *BackupManager {
-	return &BackupManager{
-		config:  config,
+func NewManager(cfg *config.Config, verbose bool) *Manager {
+	return &Manager{
+		config:  cfg,
 		verbose: verbose,
 	}
 }
 
-func (bm *BackupManager) RunBackup(targetName string, target *TargetConfig) error {
+func (bm *Manager) RunBackup(targetName string, target *config.TargetConfig) error {
 	log.Printf("=== Starting BTRFS backup process for target: %s ===", targetName)
 
 	if err := bm.validateEnvironment(target.Subvolume); err != nil {
@@ -56,7 +58,7 @@ func (bm *BackupManager) RunBackup(targetName string, target *TargetConfig) erro
 	return nil
 }
 
-func (bm *BackupManager) validateEnvironment(subvolume string) error {
+func (bm *Manager) validateEnvironment(subvolume string) error {
 	log.Println("Validating backup environment")
 
 	if _, err := os.Stat(bm.config.SnapshotDir); os.IsNotExist(err) {
@@ -75,7 +77,7 @@ func (bm *BackupManager) validateEnvironment(subvolume string) error {
 	return nil
 }
 
-func (bm *BackupManager) createSnapshot(subvolume, prefix string) (string, error) {
+func (bm *Manager) createSnapshot(subvolume, prefix string) (string, error) {
 	timestamp := time.Now().Format("20060102-150405")
 	snapshotName := fmt.Sprintf("%s-%s", prefix, timestamp)
 	snapshotPath := filepath.Join(bm.config.SnapshotDir, snapshotName)
@@ -99,7 +101,7 @@ func (bm *BackupManager) createSnapshot(subvolume, prefix string) (string, error
 	return snapshotPath, nil
 }
 
-func (bm *BackupManager) performBackup(snapshotPath string, target *TargetConfig) error {
+func (bm *Manager) performBackup(snapshotPath string, target *config.TargetConfig) error {
 	log.Printf("Starting Restic backup of %s to repository %s", snapshotPath, target.Repository)
 
 	if _, err := os.Stat(snapshotPath); os.IsNotExist(err) {
@@ -125,7 +127,7 @@ func (bm *BackupManager) performBackup(snapshotPath string, target *TargetConfig
 	return nil
 }
 
-func (bm *BackupManager) buildBackupCommand(snapshotPath string, target *TargetConfig) *exec.Cmd {
+func (bm *Manager) buildBackupCommand(snapshotPath string, target *config.TargetConfig) *exec.Cmd {
 	args := []string{"backup", snapshotPath}
 	args = append(args, "--tag", "btrfs-backup")
 	args = append(args, "--tag", target.Prefix)
@@ -142,7 +144,7 @@ func (bm *BackupManager) buildBackupCommand(snapshotPath string, target *TargetC
 	return exec.Command(bm.config.ResticBin, args...)
 }
 
-func (bm *BackupManager) loadRepositoryEnv(repository string) ([]string, error) {
+func (bm *Manager) loadRepositoryEnv(repository string) ([]string, error) {
 	repoFile := filepath.Join(bm.config.ResticRepoDir, repository)
 	if _, err := os.Stat(repoFile); os.IsNotExist(err) {
 		return nil, fmt.Errorf("repository configuration '%s' not found: %s", repository, repoFile)
@@ -156,27 +158,35 @@ func (bm *BackupManager) loadRepositoryEnv(repository string) ([]string, error) 
 	}
 
 	// Parse YAML-style repository config
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	content := string(data)
+	for len(content) > 0 {
+		var line string
+		if newlineIdx := strings.Index(content, "\n"); newlineIdx >= 0 {
+			line = content[:newlineIdx]
+			content = content[newlineIdx+1:]
+		} else {
+			line = content
+			content = ""
+		}
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
+		key, value, found := strings.Cut(line, ":")
+		if !found {
 			continue
 		}
 
-		key := strings.TrimSpace(parts[0])
-		value := strings.Trim(strings.TrimSpace(parts[1]), "\"'")
+		key = strings.TrimSpace(key)
+		value = strings.Trim(strings.TrimSpace(value), "\"'")
 		env = append(env, fmt.Sprintf("%s=%s", key, value))
 	}
 
 	return env, nil
 }
 
-func (bm *BackupManager) verifyRepository(repository string) error {
+func (bm *Manager) verifyRepository(repository string) error {
 	log.Printf("Verifying repository integrity: %s", repository)
 
 	env, err := bm.loadRepositoryEnv(repository)
@@ -199,7 +209,7 @@ func (bm *BackupManager) verifyRepository(repository string) error {
 	return nil
 }
 
-func (bm *BackupManager) cleanupOldSnapshots(prefix string, retention int) error {
+func (bm *Manager) cleanupOldSnapshots(prefix string, retention int) error {
 	log.Printf("Cleaning up old snapshots, keeping last %d", retention)
 
 	snapshots, err := bm.getSnapshotsByPrefix(prefix)
@@ -231,7 +241,7 @@ func (bm *BackupManager) cleanupOldSnapshots(prefix string, retention int) error
 	return nil
 }
 
-func (bm *BackupManager) getSnapshotsByPrefix(prefix string) ([]string, error) {
+func (bm *Manager) getSnapshotsByPrefix(prefix string) ([]string, error) {
 	if _, err := os.Stat(bm.config.SnapshotDir); os.IsNotExist(err) {
 		log.Printf("Snapshots directory does not exist: %s", bm.config.SnapshotDir)
 		return []string{}, nil
@@ -277,7 +287,7 @@ func (bm *BackupManager) getSnapshotsByPrefix(prefix string) ([]string, error) {
 	return result, nil
 }
 
-func (bm *BackupManager) deleteSnapshot(snapshotName string) error {
+func (bm *Manager) deleteSnapshot(snapshotName string) error {
 	snapshotPath := filepath.Join(bm.config.SnapshotDir, snapshotName)
 	log.Printf("Deleting old snapshot: %s", snapshotName)
 

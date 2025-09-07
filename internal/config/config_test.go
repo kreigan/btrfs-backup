@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -179,21 +179,21 @@ func TestSetTargetDefaults(t *testing.T) {
 func TestGetConfigPath(t *testing.T) {
 	// Test with provided path
 	provided := "/custom/config.yaml"
-	result := getConfigPath(provided)
+	result := GetConfigPath(provided)
 	if result != provided {
 		t.Errorf("Expected provided path '%s', got '%s'", provided, result)
 	}
 
 	// Test with environment variable
 	os.Setenv("BTRFSBACKUP_CONFIG", "/env/config.yaml")
-	result = getConfigPath("")
+	result = GetConfigPath("")
 	if result != "/env/config.yaml" {
 		t.Errorf("Expected env path '/env/config.yaml', got '%s'", result)
 	}
 	os.Unsetenv("BTRFSBACKUP_CONFIG")
 
 	// Test default path
-	result = getConfigPath("")
+	result = GetConfigPath("")
 	home, _ := os.UserHomeDir()
 	expected := filepath.Join(home, ".config", "btrfs-backup", "config.yaml")
 	if result != expected {
@@ -204,20 +204,20 @@ func TestGetConfigPath(t *testing.T) {
 func TestGetTargetConfigPath(t *testing.T) {
 	// Test with provided path
 	provided := "/custom/target.yaml"
-	result := getTargetConfigPath(provided, "/targets", "test-target")
+	result := GetTargetConfigPath(provided, "/targets", "test-target")
 	if result != provided {
 		t.Errorf("Expected provided path '%s', got '%s'", provided, result)
 	}
 
 	// Test with target dir
-	result = getTargetConfigPath("", "/custom/targets", "test-target")
+	result = GetTargetConfigPath("", "/custom/targets", "test-target")
 	expected := "/custom/targets/test-target"
 	if result != expected {
 		t.Errorf("Expected '%s', got '%s'", expected, result)
 	}
 
 	// Test default path
-	result = getTargetConfigPath("", "", "test-target")
+	result = GetTargetConfigPath("", "", "test-target")
 	home, _ := os.UserHomeDir()
 	expected = filepath.Join(home, ".config", "btrfs-backup", "targets", "test-target")
 	if result != expected {

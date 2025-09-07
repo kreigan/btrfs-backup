@@ -1,37 +1,40 @@
-package main
+package backup
 
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"btrfs-backup/internal/config"
 )
 
-func TestNewBackupManager(t *testing.T) {
-	config := &Config{
+func TestNewManager(t *testing.T) {
+	cfg := &config.Config{
 		TargetDir:     "/tmp/targets",
 		SnapshotDir:   "/tmp/snapshots",
 		ResticRepoDir: "/tmp/repos",
 		ResticBin:     "/usr/bin/restic",
 	}
 
-	mgr := NewBackupManager(config, true)
-	if mgr.config != config {
-		t.Error("BackupManager config not set correctly")
+	mgr := NewManager(cfg, true)
+	if mgr.config != cfg {
+		t.Error("Manager config not set correctly")
 	}
 	if !mgr.verbose {
-		t.Error("BackupManager verbose flag not set correctly")
+		t.Error("Manager verbose flag not set correctly")
 	}
 }
 
 func TestBuildBackupCommand(t *testing.T) {
-	config := &Config{
+	cfg := &config.Config{
 		ResticBin: "/usr/bin/restic",
 	}
-	mgr := NewBackupManager(config, false)
+	mgr := NewManager(cfg, false)
 
-	target := &TargetConfig{
+	target := &config.TargetConfig{
 		Prefix: "test-backup",
 		Type:   "incremental",
 	}
@@ -63,14 +66,7 @@ func TestBuildBackupCommand(t *testing.T) {
 	target.Type = "full"
 	cmd = mgr.buildBackupCommand(snapshotPath, target)
 	
-	hasForceFlag := false
-	for _, arg := range cmd.Args {
-		if arg == "--force" {
-			hasForceFlag = true
-			break
-		}
-	}
-	if !hasForceFlag {
+	if !slices.Contains(cmd.Args, "--force") {
 		t.Error("Full backup should include --force flag")
 	}
 }
@@ -83,10 +79,10 @@ func TestLoadRepositoryEnv(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	config := &Config{
+	cfg := &config.Config{
 		ResticRepoDir: tmpDir,
 	}
-	mgr := NewBackupManager(config, false)
+	mgr := NewManager(cfg, false)
 
 	// Create test repository config
 	repoConfig := `RESTIC_REPOSITORY: b2:bucket/path
@@ -144,10 +140,10 @@ func TestGetSnapshotsByPrefix(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	config := &Config{
+	cfg := &config.Config{
 		SnapshotDir: tmpDir,
 	}
-	mgr := NewBackupManager(config, false)
+	mgr := NewManager(cfg, false)
 
 	// Create test snapshot directories with different timestamps
 	snapshots := []string{
@@ -196,8 +192,8 @@ func TestGetSnapshotsByPrefix(t *testing.T) {
 	}
 
 	// Test with nonexistent snapshot dir
-	config.SnapshotDir = "/nonexistent"
-	mgr = NewBackupManager(config, false)
+	cfg.SnapshotDir = "/nonexistent"
+	mgr = NewManager(cfg, false)
 	result, err = mgr.getSnapshotsByPrefix("test-backup")
 	if err != nil {
 		t.Fatalf("getSnapshotsByPrefix should not fail for nonexistent dir: %v", err)
