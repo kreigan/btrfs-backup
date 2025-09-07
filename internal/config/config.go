@@ -1,3 +1,5 @@
+// Package config provides configuration loading and validation for btrfs-backup.
+// It supports both JSON and YAML configuration files for main settings and backup targets.
 package config
 
 import (
@@ -8,22 +10,30 @@ import (
 	"strings"
 )
 
+// Config represents the main btrfs-backup configuration containing
+// paths to directories and executables needed for backup operations.
 type Config struct {
-	TargetDir     string `json:"target_dir" yaml:"target_dir"`
-	SnapshotDir   string `json:"snapshot_dir" yaml:"snapshot_dir"`
-	ResticRepoDir string `json:"restic_repo_dir" yaml:"restic_repo_dir"`
-	ResticBin     string `json:"restic_bin" yaml:"restic_bin"`
+	TargetDir     string `json:"target_dir" yaml:"target_dir"`         // Directory containing target configuration files
+	SnapshotDir   string `json:"snapshot_dir" yaml:"snapshot_dir"`     // Directory where BTRFS snapshots are created
+	ResticRepoDir string `json:"restic_repo_dir" yaml:"restic_repo_dir"` // Directory containing Restic repository configurations
+	ResticBin     string `json:"restic_bin" yaml:"restic_bin"`         // Path to the Restic binary
 }
 
+// TargetConfig represents configuration for a specific backup target,
+// defining the source subvolume, backup settings, and retention policy.
 type TargetConfig struct {
-	Subvolume     string `json:"subvolume" yaml:"subvolume"`
-	Prefix        string `json:"prefix" yaml:"prefix"`
-	Repository    string `json:"repository" yaml:"repository"`
-	Type          string `json:"type" yaml:"type"`
-	Verify        bool   `json:"verify" yaml:"verify"`
-	KeepSnapshots int    `json:"keep_snapshots" yaml:"keep_snapshots"`
+	Subvolume     string `json:"subvolume" yaml:"subvolume"`             // BTRFS subvolume to backup
+	Prefix        string `json:"prefix" yaml:"prefix"`                   // Prefix for snapshot names
+	Repository    string `json:"repository" yaml:"repository"`           // Restic repository identifier
+	Type          string `json:"type" yaml:"type"`                       // Backup type: "incremental" or "full"
+	Verify        bool   `json:"verify" yaml:"verify"`                   // Whether to verify repository after backup
+	KeepSnapshots int    `json:"keep_snapshots" yaml:"keep_snapshots"`   // Number of local snapshots to retain
 }
 
+// GetConfigPath determines the main configuration file path using the following priority:
+// 1. Provided path parameter (highest priority)
+// 2. BTRFSBACKUP_CONFIG environment variable
+// 3. Default path: $HOME/.config/btrfs-backup/config.yaml (lowest priority)
 func GetConfigPath(provided string) string {
 	if provided != "" {
 		return provided
@@ -42,6 +52,10 @@ func GetConfigPath(provided string) string {
 	return filepath.Join(home, ".config", "btrfs-backup", "config.yaml")
 }
 
+// GetTargetConfigPath determines the target configuration file path using the following priority:
+// 1. Provided path parameter (highest priority)
+// 2. targetDir from main config + targetName
+// 3. Default path: $HOME/.config/btrfs-backup/targets/<targetName> (lowest priority)
 func GetTargetConfigPath(provided, targetDir, targetName string) string {
 	if provided != "" {
 		return provided
@@ -61,6 +75,9 @@ func GetTargetConfigPath(provided, targetDir, targetName string) string {
 	return filepath.Join(defaultTargetDir, targetName)
 }
 
+// LoadConfig loads and validates the main configuration from the specified file path.
+// It supports both JSON and YAML formats, trying JSON first then falling back to YAML.
+// Returns a validated Config struct or an error if loading/validation fails.
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -84,6 +101,9 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+// LoadTargetConfig loads and validates a target configuration from the specified file path.
+// It supports both JSON and YAML formats, applies default values, and validates the configuration.
+// Returns a validated TargetConfig struct or an error if loading/validation fails.
 func LoadTargetConfig(path string) (*TargetConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
