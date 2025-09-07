@@ -1,3 +1,5 @@
+// Package cli provides command-line interface functionality for btrfs-backup.
+// It handles argument parsing, user interaction, progress logging, and error presentation.
 package cli
 
 import (
@@ -12,6 +14,8 @@ import (
 
 const version = "0.1.0"
 
+// Run is the main entry point for the CLI application.
+// It parses command-line arguments and dispatches to the appropriate command handler.
 func Run() {
 	if len(os.Args) < 2 {
 		printUsage()

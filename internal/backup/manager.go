@@ -1,3 +1,4 @@
+// Package backup provides BTRFS snapshot creation and Restic backup management functionality.
 package backup
 
 import (
@@ -12,11 +13,15 @@ import (
 	"btrfs-backup/internal/config"
 )
 
+// Manager handles BTRFS backup operations including snapshot creation,
+// Restic backups, repository verification, and cleanup tasks.
 type Manager struct {
 	config  *config.Config
 	verbose bool
 }
 
+// NewManager creates a new backup manager with the provided configuration.
+// The verbose parameter controls whether detailed command logging is enabled.
 func NewManager(cfg *config.Config, verbose bool) *Manager {
 	return &Manager{
 		config:  cfg,
@@ -24,6 +29,10 @@ func NewManager(cfg *config.Config, verbose bool) *Manager {
 	}
 }
 
+// RunBackup executes the complete backup workflow for a target.
+// It performs environment validation, creates a BTRFS snapshot, backs up to Restic,
+// optionally verifies the repository, and cleans up old snapshots.
+// If any step fails, the process stops and returns an error with context.
 func (bm *Manager) RunBackup(targetName string, target *config.TargetConfig) error {
 	err := bm.ValidateEnvironment(target.Subvolume)
 	if err != nil {
@@ -55,6 +64,9 @@ func (bm *Manager) RunBackup(targetName string, target *config.TargetConfig) err
 	return nil
 }
 
+// ValidateEnvironment checks that the backup environment is properly configured.
+// It verifies that the snapshots directory exists and that the source subvolume
+// is a valid BTRFS subvolume. Returns an error if any validation fails.
 func (bm *Manager) ValidateEnvironment(subvolume string) error {
 	_, err := os.Stat(bm.config.SnapshotDir)
 	if os.IsNotExist(err) {
@@ -70,6 +82,9 @@ func (bm *Manager) ValidateEnvironment(subvolume string) error {
 	return nil
 }
 
+// CreateSnapshot creates a read-only BTRFS snapshot of the specified subvolume.
+// The snapshot is named using the provided prefix and current timestamp (YYYYMMDD-HHMMSS format).
+// Returns the full path to the created snapshot or an error if creation fails.
 func (bm *Manager) CreateSnapshot(subvolume, prefix string) (string, error) {
 	timestamp := time.Now().Format("20060102-150405")
 	snapshotName := fmt.Sprintf("%s-%s", prefix, timestamp)
@@ -89,6 +104,10 @@ func (bm *Manager) CreateSnapshot(subvolume, prefix string) (string, error) {
 	return snapshotPath, nil
 }
 
+// PerformBackup backs up the specified snapshot to a Restic repository.
+// It loads the repository environment configuration, builds the appropriate
+// Restic command (incremental or full), and executes the backup.
+// Returns an error if the snapshot doesn't exist, repository config fails, or backup fails.
 func (bm *Manager) PerformBackup(snapshotPath string, target *config.TargetConfig) error {
 	_, err := os.Stat(snapshotPath)
 	if os.IsNotExist(err) {
@@ -167,6 +186,9 @@ func (bm *Manager) loadRepositoryEnv(repository string) ([]string, error) {
 	return env, nil
 }
 
+// VerifyRepository performs integrity verification on a Restic repository.
+// It runs 'restic check' with a 5% data subset check to verify repository consistency.
+// Returns an error if the repository configuration fails or verification detects issues.
 func (bm *Manager) VerifyRepository(repository string) error {
 	env, err := bm.loadRepositoryEnv(repository)
 	if err != nil {
@@ -184,6 +206,9 @@ func (bm *Manager) VerifyRepository(repository string) error {
 	return nil
 }
 
+// CleanupOldSnapshots removes old snapshots beyond the retention limit.
+// It finds all snapshots with the given prefix, sorts them by modification time (newest first),
+// and deletes snapshots beyond the retention count. Returns an error if any deletions fail.
 func (bm *Manager) CleanupOldSnapshots(prefix string, retention int) error {
 	snapshots, err := bm.getSnapshotsByPrefix(prefix)
 	if err != nil {
