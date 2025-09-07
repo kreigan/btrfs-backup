@@ -1,0 +1,32 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+
+# Build output
+btrfs-backup
+btrfs-backup.exe
+
+# Config files (may contain secrets)
+config.yaml
+config.json
+repos/
+targets/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
