@@ -122,15 +122,87 @@ func handleBackup(args []string) {
 }
 
 func runBackup(targetName string, cfg *config.Config, target *config.TargetConfig, verbose bool) error {
-	log.Printf("Starting backup for target: %s", targetName)
+	log.Printf("=== Starting BTRFS backup process for target: %s ===", targetName)
 	log.Printf("Subvolume: %s", target.Subvolume)
 	log.Printf("Repository: %s", target.Repository)
 	log.Printf("Type: %s", target.Type)
 	log.Printf("Verify: %t", target.Verify)
 	log.Printf("Keep snapshots: %d", target.KeepSnapshots)
 
-	// Create backup manager
 	mgr := backup.NewManager(cfg, verbose)
 	
-	return mgr.RunBackup(targetName, target)
+	// Step 1: Environment validation
+	log.Println("Validating backup environment")
+	err := validateEnvironmentWithLogging(mgr, target.Subvolume, cfg)
+	if err != nil {
+		return fmt.Errorf("environment validation failed: %w", err)
+	}
+	log.Println("Environment validation completed successfully")
+
+	// Step 2: Create snapshot
+	log.Printf("Creating BTRFS snapshot with prefix: %s", target.Prefix)
+	snapshotPath, err := createSnapshotWithLogging(mgr, target.Subvolume, target.Prefix, verbose)
+	if err != nil {
+		return fmt.Errorf("snapshot creation failed: %w", err)
+	}
+	log.Printf("Snapshot created successfully: %s", snapshotPath)
+
+	// Step 3: Perform backup
+	backupType := "incremental"
+	if target.Type == "full" {
+		backupType = "full"
+	}
+	log.Printf("Starting Restic %s backup to repository %s", backupType, target.Repository)
+	err = performBackupWithLogging(mgr, snapshotPath, target, verbose)
+	if err != nil {
+		log.Printf("Backup failed, keeping snapshot for investigation: %s", snapshotPath)
+		return fmt.Errorf("backup operation failed: %w", err)
+	}
+	log.Printf("Restic backup completed successfully")
+
+	// Step 4: Verify repository (if enabled)
+	if target.Verify {
+		log.Printf("Verifying repository integrity: %s", target.Repository)
+		err = verifyRepositoryWithLogging(mgr, target.Repository, verbose)
+		if err != nil {
+			log.Printf("Repository verification failed (warning): %v", err)
+		} else {
+			log.Printf("Repository verification completed successfully")
+		}
+	}
+
+	// Step 5: Clean up old snapshots
+	log.Printf("Cleaning up old snapshots, keeping last %d", target.KeepSnapshots)
+	err = cleanupSnapshotsWithLogging(mgr, target.Prefix, target.KeepSnapshots)
+	if err != nil {
+		log.Printf("Failed to cleanup old snapshots (warning): %v", err)
+	} else {
+		log.Println("Snapshot cleanup completed successfully")
+	}
+
+	log.Println("=== Backup process completed successfully ===")
+	return nil
+}
+
+// Helper functions that call manager methods but handle CLI-specific logging
+func validateEnvironmentWithLogging(mgr *backup.Manager, subvolume string, cfg *config.Config) error {
+	// This would call individual validation steps from the manager
+	// For now, we'll use a simplified approach
+	return mgr.ValidateEnvironment(subvolume)
+}
+
+func createSnapshotWithLogging(mgr *backup.Manager, subvolume, prefix string, verbose bool) (string, error) {
+	return mgr.CreateSnapshot(subvolume, prefix)
+}
+
+func performBackupWithLogging(mgr *backup.Manager, snapshotPath string, target *config.TargetConfig, verbose bool) error {
+	return mgr.PerformBackup(snapshotPath, target)
+}
+
+func verifyRepositoryWithLogging(mgr *backup.Manager, repository string, verbose bool) error {
+	return mgr.VerifyRepository(repository)
+}
+
+func cleanupSnapshotsWithLogging(mgr *backup.Manager, prefix string, retention int) error {
+	return mgr.CleanupOldSnapshots(prefix, retention)
 }
