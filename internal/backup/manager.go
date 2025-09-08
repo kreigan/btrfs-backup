@@ -4,20 +4,25 @@ package backup
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"btrfs-backup/internal/btrfs"
 	"btrfs-backup/internal/config"
+	"btrfs-backup/internal/restic"
 )
+
 
 // Manager handles BTRFS backup operations including snapshot creation,
 // Restic backups, repository verification, and cleanup tasks.
 type Manager struct {
 	config  *config.Config
 	verbose bool
+	fs      FileSystem
+	btrfs   BtrfsClient
+	restic  ResticClient
 }
 
 // NewManager creates a new backup manager with the provided configuration.
@@ -26,6 +31,20 @@ func NewManager(cfg *config.Config, verbose bool) *Manager {
 	return &Manager{
 		config:  cfg,
 		verbose: verbose,
+		fs:      &DefaultFileSystem{},
+		btrfs:   btrfs.NewDefaultClient(),
+		restic:  restic.NewDefaultClient(cfg.ResticBin),
+	}
+}
+
+// NewManagerWithDeps creates a new backup manager with custom dependencies for testing.
+func NewManagerWithDeps(cfg *config.Config, verbose bool, fs FileSystem, btrfs BtrfsClient, restic ResticClient) *Manager {
+	return &Manager{
+		config:  cfg,
+		verbose: verbose,
+		fs:      fs,
+		btrfs:   btrfs,
+		restic:  restic,
 	}
 }
 
@@ -68,13 +87,12 @@ func (bm *Manager) RunBackup(targetName string, target *config.TargetConfig) err
 // It verifies that the snapshots directory exists and that the source subvolume
 // is a valid BTRFS subvolume. Returns an error if any validation fails.
 func (bm *Manager) ValidateEnvironment(subvolume string) error {
-	_, err := os.Stat(bm.config.SnapshotDir)
+	_, err := bm.fs.Stat(bm.config.SnapshotDir)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("snapshots directory does not exist: %s", bm.config.SnapshotDir)
 	}
 
-	cmd := exec.Command("sudo", "btrfs", "subvolume", "show", subvolume)
-	err = cmd.Run()
+	err = bm.btrfs.ShowSubvolume(subvolume)
 	if err != nil {
 		return fmt.Errorf("source subvolume invalid or not BTRFS: %s", subvolume)
 	}
@@ -90,13 +108,12 @@ func (bm *Manager) CreateSnapshot(subvolume, prefix string) (string, error) {
 	snapshotName := fmt.Sprintf("%s-%s", prefix, timestamp)
 	snapshotPath := filepath.Join(bm.config.SnapshotDir, snapshotName)
 
-	cmd := exec.Command("sudo", "btrfs", "subvolume", "snapshot", "-r", subvolume, snapshotPath)
-	err := cmd.Run()
+	err := bm.btrfs.CreateSnapshot(subvolume, snapshotPath, true)
 	if err != nil {
 		return "", fmt.Errorf("BTRFS snapshot command failed: %w", err)
 	}
 
-	_, err = os.Stat(snapshotPath)
+	_, err = bm.fs.Stat(snapshotPath)
 	if os.IsNotExist(err) {
 		return "", fmt.Errorf("snapshot not found after creation: %s", snapshotPath)
 	}
@@ -109,7 +126,7 @@ func (bm *Manager) CreateSnapshot(subvolume, prefix string) (string, error) {
 // Restic command (incremental or full), and executes the backup.
 // Returns an error if the snapshot doesn't exist, repository config fails, or backup fails.
 func (bm *Manager) PerformBackup(snapshotPath string, target *config.TargetConfig) error {
-	_, err := os.Stat(snapshotPath)
+	_, err := bm.fs.Stat(snapshotPath)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("snapshot path does not exist: %s", snapshotPath)
 	}
@@ -119,9 +136,10 @@ func (bm *Manager) PerformBackup(snapshotPath string, target *config.TargetConfi
 		return fmt.Errorf("repository configuration failed: %w", err)
 	}
 
-	cmd := bm.buildBackupCommand(snapshotPath, target)
-	cmd.Env = env
-	err = cmd.Run()
+	tags := []string{"btrfs-backup", target.Prefix, filepath.Base(snapshotPath)}
+	force := target.Type == "full"
+	
+	err = bm.restic.Backup(env, snapshotPath, tags, true, force)
 	if err != nil {
 		return fmt.Errorf("restic backup command failed: %w", err)
 	}
@@ -129,30 +147,16 @@ func (bm *Manager) PerformBackup(snapshotPath string, target *config.TargetConfi
 	return nil
 }
 
-func (bm *Manager) buildBackupCommand(snapshotPath string, target *config.TargetConfig) *exec.Cmd {
-	args := []string{"backup", snapshotPath}
-	args = append(args, "--tag", "btrfs-backup")
-	args = append(args, "--tag", target.Prefix)
-	args = append(args, "--tag", filepath.Base(snapshotPath))
-	args = append(args, "--exclude-caches")
-
-	if target.Type == "full" {
-		args = append(args, "--force")
-	}
-
-	return exec.Command(bm.config.ResticBin, args...)
-}
-
 func (bm *Manager) loadRepositoryEnv(repository string) ([]string, error) {
 	repoFile := filepath.Join(bm.config.ResticRepoDir, repository)
-	_, err := os.Stat(repoFile)
+	_, err := bm.fs.Stat(repoFile)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("repository configuration '%s' not found: %s", repository, repoFile)
 	}
 
 	env := os.Environ()
 
-	data, err := os.ReadFile(repoFile)
+	data, err := bm.fs.ReadFile(repoFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read repository config %s: %w", repoFile, err)
 	}
@@ -195,10 +199,7 @@ func (bm *Manager) VerifyRepository(repository string) error {
 		return fmt.Errorf("repository configuration failed for verification: %w", err)
 	}
 
-	cmd := exec.Command(bm.config.ResticBin, "check", "--read-data-subset=5%")
-	cmd.Env = env
-
-	err = cmd.Run()
+	err = bm.restic.Check(env, "5%")
 	if err != nil {
 		return fmt.Errorf("repository verification failed: %s - %w", repository, err)
 	}
@@ -237,12 +238,12 @@ func (bm *Manager) CleanupOldSnapshots(prefix string, retention int) error {
 }
 
 func (bm *Manager) getSnapshotsByPrefix(prefix string) ([]string, error) {
-	_, err := os.Stat(bm.config.SnapshotDir)
+	_, err := bm.fs.Stat(bm.config.SnapshotDir)
 	if os.IsNotExist(err) {
 		return []string{}, nil
 	}
 
-	entries, err := os.ReadDir(bm.config.SnapshotDir)
+	entries, err := bm.fs.ReadDir(bm.config.SnapshotDir)
 	if err != nil {
 		return nil, fmt.Errorf("could not list snapshots directory: %w", err)
 	}
@@ -284,13 +285,12 @@ func (bm *Manager) getSnapshotsByPrefix(prefix string) ([]string, error) {
 func (bm *Manager) deleteSnapshot(snapshotName string) error {
 	snapshotPath := filepath.Join(bm.config.SnapshotDir, snapshotName)
 
-	cmd := exec.Command("sudo", "btrfs", "subvolume", "delete", snapshotPath)
-	err := cmd.Run()
+	err := bm.btrfs.DeleteSubvolume(snapshotPath)
 	if err != nil {
 		return fmt.Errorf("BTRFS delete command failed for snapshot %s: %w", snapshotName, err)
 	}
 
-	_, err = os.Stat(snapshotPath)
+	_, err = bm.fs.Stat(snapshotPath)
 	if err == nil {
 		return fmt.Errorf("snapshot still exists after deletion: %s", snapshotPath)
 	}
