@@ -48,14 +48,14 @@ func createRootCmd() *cobra.Command {
 	}
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", 
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "",
 		"config file path (default: $HOME/.config/btrfs-backup/config.yaml)")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, 
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false,
 		"enable debug logging")
 
 	// Bind flags to viper for configuration integration
-	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+	_ = viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
+	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 
 	// Add subcommands
 	rootCmd.AddCommand(createVersionCmd())
@@ -78,7 +78,7 @@ func createVersionCmd() *cobra.Command {
 // createBackupCmd creates the backup subcommand
 func createBackupCmd() *cobra.Command {
 	var targetConfigPath string
-	
+
 	backupCmd := &cobra.Command{
 		Use:   "backup <target-name>",
 		Short: "Perform backup operation",
@@ -91,7 +91,7 @@ func createBackupCmd() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			targetName := args[0]
-			
+
 			// Determine config path
 			finalConfigPath := config.GetConfigPath(configFile)
 			if verbose {
@@ -129,12 +129,11 @@ func createBackupCmd() *cobra.Command {
 	}
 
 	// Backup-specific flags
-	backupCmd.Flags().StringVarP(&targetConfigPath, "target-config", "t", "", 
+	backupCmd.Flags().StringVarP(&targetConfigPath, "target-config", "t", "",
 		"path to target configuration file")
 
 	return backupCmd
 }
-
 
 func runBackup(targetName string, cfg *config.Config, target *config.TargetConfig, verbose bool) error {
 	log.Printf("=== Starting BTRFS backup process for target: %s ===", targetName)
@@ -145,7 +144,7 @@ func runBackup(targetName string, cfg *config.Config, target *config.TargetConfi
 	log.Printf("Keep snapshots: %d", target.KeepSnapshots)
 
 	mgr := backup.NewManager(cfg, verbose)
-	
+
 	// Step 1: Environment validation
 	log.Println("Validating backup environment")
 	err := validateEnvironmentWithLogging(mgr, target.Subvolume, cfg)

@@ -35,7 +35,7 @@ func (c *DefaultClient) Backup(repositoryEnv []string, snapshotPath string, tags
 	if force {
 		args = append(args, "--force")
 	}
-	
+
 	cmd := exec.Command(c.resticBin, args...)
 	cmd.Env = repositoryEnv
 	return cmd.Run()
@@ -48,7 +48,7 @@ func (c *DefaultClient) Check(repositoryEnv []string, readDataSubset string) err
 	if readDataSubset != "" {
 		args = append(args, "--read-data-subset="+readDataSubset)
 	}
-	
+
 	cmd := exec.Command(c.resticBin, args...)
 	cmd.Env = repositoryEnv
 	return cmd.Run()

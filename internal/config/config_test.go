@@ -14,7 +14,7 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configFile := filepath.Join(tmpDir, "config.yaml")
 	configData := `target_dir: /tmp/targets
@@ -49,17 +49,17 @@ restic_bin: /usr/bin/restic
 
 func TestLoadConfigWithEnvironmentVariables(t *testing.T) {
 	// Set environment variables
-	os.Setenv("BTRFSBACKUP_TARGET_DIR", "/env/targets")
-	os.Setenv("BTRFSBACKUP_SNAPSHOT_DIR", "/env/snapshots")
-	defer os.Unsetenv("BTRFSBACKUP_TARGET_DIR")
-	defer os.Unsetenv("BTRFSBACKUP_SNAPSHOT_DIR")
+	_ = os.Setenv("BTRFSBACKUP_TARGET_DIR", "/env/targets")
+	_ = os.Setenv("BTRFSBACKUP_SNAPSHOT_DIR", "/env/snapshots")
+	defer func() { _ = os.Unsetenv("BTRFSBACKUP_TARGET_DIR") }()
+	defer func() { _ = os.Unsetenv("BTRFSBACKUP_SNAPSHOT_DIR") }()
 
 	// Create a temporary config file with some values
 	tmpDir, err := os.MkdirTemp("", "btrfs-backup-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configFile := filepath.Join(tmpDir, "config.yaml")
 	configData := `target_dir: /file/targets
@@ -92,7 +92,7 @@ func TestLoadTargetConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	targetFile := filepath.Join(tmpDir, "target.yaml")
 	targetData := `subvolume: /mnt/btrfs/home
@@ -139,7 +139,7 @@ func TestLoadTargetConfigWithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	targetFile := filepath.Join(tmpDir, "target.yaml")
 	targetData := `subvolume: /mnt/btrfs/home
@@ -269,12 +269,12 @@ func TestGetConfigPath(t *testing.T) {
 	}
 
 	// Test with environment variable
-	os.Setenv("BTRFSBACKUP_CONFIG", "/env/config.yaml")
+	_ = os.Setenv("BTRFSBACKUP_CONFIG", "/env/config.yaml")
 	result = GetConfigPath("")
 	if result != "/env/config.yaml" {
 		t.Errorf("Expected env path '/env/config.yaml', got '%s'", result)
 	}
-	os.Unsetenv("BTRFSBACKUP_CONFIG")
+	_ = os.Unsetenv("BTRFSBACKUP_CONFIG")
 
 	// Test default path
 	result = GetConfigPath("")
