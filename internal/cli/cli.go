@@ -1,12 +1,14 @@
 // Package cli provides command-line interface functionality for btrfs-backup.
-// It handles argument parsing, user interaction, progress logging, and error presentation.
+// It uses Cobra for professional CLI with subcommands, automatic help, and completions.
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"btrfs-backup/internal/backup"
 	"btrfs-backup/internal/config"
@@ -14,116 +16,125 @@ import (
 
 const version = "0.1.0"
 
+var (
+	configFile string
+	verbose    bool
+)
+
 // Run is the main entry point for the CLI application.
-// It parses command-line arguments and dispatches to the appropriate command handler.
+// It initializes and executes the root Cobra command.
 func Run() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
-
-	command := os.Args[1]
-	args := os.Args[2:]
-
-	switch command {
-	case "version":
-		handleVersion(args)
-	case "backup":
-		handleBackup(args)
-	case "help", "--help", "-h":
-		printUsage()
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
-		printUsage()
+	rootCmd := createRootCmd()
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func printUsage() {
-	fmt.Printf("btrfs-backup %s - BTRFS Backup with Restic\n\n", version)
-	fmt.Print(`Usage:
-  btrfs-backup <command> [options]
-
-Commands:
-  version          Show version information
-  backup <target>  Perform backup operation
-
-Global Options:
-  -c, --config     Config file path (default: $HOME/.config/btrfs-backup/config.yaml)
-                   Can also be set via BTRFSBACKUP_CONFIG environment variable
-  -v, --verbose    Enable debug logging
-
-Backup Command Options:
-  -t, --target-config   Path to target configuration file
-                        (default: $HOME/.config/btrfs-backup/targets/<target>)
-
-Examples:
-  btrfs-backup version
-  btrfs-backup backup my-target
-  btrfs-backup backup my-target -v
-  btrfs-backup backup my-target -c /path/to/config.yaml
-  btrfs-backup backup my-target -t /path/to/target.yaml
-`)
-}
-
-func handleVersion(_ []string) {
-	fmt.Printf("btrfs-backup version %s\n", version)
-}
-
-func handleBackup(args []string) {
-	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "Error: backup command requires a target name\n")
-		fmt.Fprintf(os.Stderr, "Usage: btrfs-backup backup <target-name> [options]\n")
-		os.Exit(1)
+// createRootCmd creates and configures the root Cobra command
+func createRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "btrfs-backup",
+		Short: "BTRFS Backup with Restic",
+		Long:  `A backup tool that creates BTRFS snapshots and backs them up using Restic.`,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if verbose {
+				log.SetFlags(log.LstdFlags | log.Lshortfile)
+				log.Println("Debug logging enabled")
+			}
+		},
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 
-	targetName := args[0]
+	// Global flags
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", 
+		"config file path (default: $HOME/.config/btrfs-backup/config.yaml)")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, 
+		"enable debug logging")
+
+	// Bind flags to viper for configuration integration
+	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
+	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+
+	// Add subcommands
+	rootCmd.AddCommand(createVersionCmd())
+	rootCmd.AddCommand(createBackupCmd())
+
+	return rootCmd
+}
+
+// createVersionCmd creates the version subcommand
+func createVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Show version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("btrfs-backup version %s\n", version)
+		},
+	}
+}
+
+// createBackupCmd creates the backup subcommand
+func createBackupCmd() *cobra.Command {
+	var targetConfigPath string
 	
-	fs := flag.NewFlagSet("backup", flag.ExitOnError)
-	configPath := fs.String("c", "", "Config file path")
-	fs.StringVar(configPath, "config", "", "Config file path")
-	verbose := fs.Bool("v", false, "Enable verbose logging")
-	fs.BoolVar(verbose, "verbose", false, "Enable verbose logging")
-	targetConfigPath := fs.String("t", "", "Target config file path")
-	fs.StringVar(targetConfigPath, "target-config", "", "Target config file path")
+	backupCmd := &cobra.Command{
+		Use:   "backup <target-name>",
+		Short: "Perform backup operation",
+		Long: `Perform a complete backup workflow including:
+- Environment validation
+- BTRFS snapshot creation  
+- Restic backup to repository
+- Optional repository verification
+- Cleanup of old snapshots`,
+		Args: cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			targetName := args[0]
+			
+			// Determine config path
+			finalConfigPath := config.GetConfigPath(configFile)
+			if verbose {
+				log.Printf("Using config file: %s", finalConfigPath)
+			}
 
-	fs.Parse(args[1:])
+			// Load main configuration
+			cfg, err := config.LoadConfig(finalConfigPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+				os.Exit(1)
+			}
 
-	if *verbose {
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
-		log.Println("Debug logging enabled")
+			// Determine target config path
+			finalTargetConfigPath := config.GetTargetConfigPath(targetConfigPath, cfg.TargetDir, targetName)
+			if verbose {
+				log.Printf("Using target config file: %s", finalTargetConfigPath)
+			}
+
+			// Load target configuration
+			targetConfig, err := config.LoadTargetConfig(finalTargetConfigPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading target configuration: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Run backup
+			if err := runBackup(targetName, cfg, targetConfig, verbose); err != nil {
+				fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println("Backup completed successfully")
+		},
 	}
 
-	// Determine config path
-	finalConfigPath := config.GetConfigPath(*configPath)
-	log.Printf("Using config file: %s", finalConfigPath)
+	// Backup-specific flags
+	backupCmd.Flags().StringVarP(&targetConfigPath, "target-config", "t", "", 
+		"path to target configuration file")
 
-	// Load main configuration
-	cfg, err := config.LoadConfig(finalConfigPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Determine target config path
-	finalTargetConfigPath := config.GetTargetConfigPath(*targetConfigPath, cfg.TargetDir, targetName)
-	log.Printf("Using target config file: %s", finalTargetConfigPath)
-
-	// Load target configuration
-	targetConfig, err := config.LoadTargetConfig(finalTargetConfigPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading target configuration: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Run backup
-	if err := runBackup(targetName, cfg, targetConfig, *verbose); err != nil {
-		fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Backup completed successfully")
+	return backupCmd
 }
+
 
 func runBackup(targetName string, cfg *config.Config, target *config.TargetConfig, verbose bool) error {
 	log.Printf("=== Starting BTRFS backup process for target: %s ===", targetName)
