@@ -14,7 +14,6 @@ import (
 	"btrfs-backup/internal/restic"
 )
 
-
 // Manager handles BTRFS backup operations including snapshot creation,
 // Restic backups, repository verification, and cleanup tasks.
 type Manager struct {
@@ -138,7 +137,7 @@ func (bm *Manager) PerformBackup(snapshotPath string, target *config.TargetConfi
 
 	tags := []string{"btrfs-backup", target.Prefix, filepath.Base(snapshotPath)}
 	force := target.Type == "full"
-	
+
 	err = bm.restic.Backup(env, snapshotPath, tags, true, force)
 	if err != nil {
 		return fmt.Errorf("restic backup command failed: %w", err)
@@ -222,7 +221,7 @@ func (bm *Manager) CleanupOldSnapshots(prefix string, retention int) error {
 
 	snapshotsToDelete := snapshots[retention:]
 	var failedDeletions []string
-	
+
 	for _, snapshot := range snapshotsToDelete {
 		err = bm.deleteSnapshot(snapshot)
 		if err != nil {

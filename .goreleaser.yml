@@ -1,0 +1,51 @@
+---
+project_name: btrfs-backup
+
+builds:
+  - id: linux-amd64
+    main: ./cmd/btrfs-backup
+    binary: btrfs-backup
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+
+  - id: linux-arm64
+    main: ./cmd/btrfs-backup
+    binary: btrfs-backup
+    goos:
+      - linux
+    goarch:
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    builds:
+      - linux-amd64
+      - linux-arm64
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+
+release:
+  github:
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    name: "{{ .Env.GITHUB_REPOSITORY }}"
+  name_template: "Release {{ .Tag }}"
+  draft: false
+  prerelease: auto

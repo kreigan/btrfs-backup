@@ -57,14 +57,15 @@ import (
 // should be returned.
 //
 // Example usage:
-//   mockFS := NewMockFileSystem()
-//   mockFS.AddFile("/path/file.txt", []byte("content"))
-//   mockFS.AddDir("/path", []MockDirEntry{})
-//   mockFS.SetStatError("/missing", os.ErrNotExist)
 //
-//   // Now mockFS.Stat("/path/file.txt") returns file info
-//   // mockFS.ReadFile("/path/file.txt") returns "content"
-//   // mockFS.Stat("/missing") returns os.ErrNotExist
+//	mockFS := NewMockFileSystem()
+//	mockFS.AddFile("/path/file.txt", []byte("content"))
+//	mockFS.AddDir("/path", []MockDirEntry{})
+//	mockFS.SetStatError("/missing", os.ErrNotExist)
+//
+//	// Now mockFS.Stat("/path/file.txt") returns file info
+//	// mockFS.ReadFile("/path/file.txt") returns "content"
+//	// mockFS.Stat("/missing") returns os.ErrNotExist
 type MockFileSystem struct {
 	files    map[string][]byte
 	dirs     map[string][]MockDirEntry
@@ -76,11 +77,12 @@ type MockFileSystem struct {
 // Used with MockFileSystem.AddDir() to simulate directory contents.
 //
 // Example:
-//   entries := []MockDirEntry{
-//     {name: "file1.txt", isDir: false, modTime: time.Now()},
-//     {name: "subdir", isDir: true, modTime: time.Now().Add(-1*time.Hour)},
-//   }
-//   mockFS.AddDir("/path", entries)
+//
+//	entries := []MockDirEntry{
+//	  {name: "file1.txt", isDir: false, modTime: time.Now()},
+//	  {name: "subdir", isDir: true, modTime: time.Now().Add(-1*time.Hour)},
+//	}
+//	mockFS.AddDir("/path", entries)
 type MockDirEntry struct {
 	name    string
 	isDir   bool
@@ -183,15 +185,16 @@ func (m *MockFileSystem) ReadFile(filename string) ([]byte, error) {
 // to set up expected operations, then the mock will verify calls match.
 //
 // Example usage:
-//   mockBtrfs := NewMockBtrfsClient(t)
-//   mockBtrfs.ExpectShowSubvolume("/mnt/btrfs/home", 0)
-//   mockBtrfs.ExpectCreateSnapshot("/mnt/btrfs/home", "/snapshots/backup-20230101-120000", true, 0)
-//   mockBtrfs.onCreateSnapshot = func(subvol, snap string) {
-//     // Callback executed on successful snapshot creation
-//     mockFS.AddFile(snap, []byte{})
-//   }
 //
-//   // Now calls to ShowSubvolume() and CreateSnapshot() will be verified
+//	mockBtrfs := NewMockBtrfsClient(t)
+//	mockBtrfs.ExpectShowSubvolume("/mnt/btrfs/home", 0)
+//	mockBtrfs.ExpectCreateSnapshot("/mnt/btrfs/home", "/snapshots/backup-20230101-120000", true, 0)
+//	mockBtrfs.onCreateSnapshot = func(subvol, snap string) {
+//	  // Callback executed on successful snapshot creation
+//	  mockFS.AddFile(snap, []byte{})
+//	}
+//
+//	// Now calls to ShowSubvolume() and CreateSnapshot() will be verified
 type MockBtrfsClient struct {
 	expectedCommands []ExpectedBtrfsCommand
 	index            int
@@ -248,14 +251,14 @@ func (m *MockBtrfsClient) ShowSubvolume(subvolume string) error {
 	if m.index >= len(m.expectedCommands) {
 		m.t.Fatalf("Unexpected btrfs show command for subvolume: %s", subvolume)
 	}
-	
+
 	expected := m.expectedCommands[m.index]
 	m.index++
-	
+
 	if expected.operation != "show" || len(expected.args) != 1 || expected.args[0] != subvolume {
 		m.t.Fatalf("Expected btrfs show %s, got show %s", expected.args[0], subvolume)
 	}
-	
+
 	if expected.exitCode != 0 {
 		return fmt.Errorf("btrfs command failed with exit code %d", expected.exitCode)
 	}
@@ -266,26 +269,26 @@ func (m *MockBtrfsClient) CreateSnapshot(subvolume, snapshotPath string, readonl
 	if m.index >= len(m.expectedCommands) {
 		m.t.Fatalf("Unexpected btrfs snapshot command: %s -> %s", subvolume, snapshotPath)
 	}
-	
+
 	expected := m.expectedCommands[m.index]
 	m.index++
-	
+
 	if expected.operation != "snapshot" {
 		m.t.Fatalf("Expected btrfs snapshot operation, got %s", expected.operation)
 	}
-	
+
 	// Allow flexible matching - if args are empty, accept any arguments
 	if len(expected.args) > 0 {
 		if len(expected.args) != 2 || expected.args[0] != subvolume || expected.args[1] != snapshotPath {
-			m.t.Fatalf("Expected btrfs snapshot %s %s, got snapshot %s %s", 
+			m.t.Fatalf("Expected btrfs snapshot %s %s, got snapshot %s %s",
 				expected.args[0], expected.args[1], subvolume, snapshotPath)
 		}
 	}
-	
+
 	if expected.exitCode != 0 {
 		return fmt.Errorf("btrfs command failed with exit code %d", expected.exitCode)
 	}
-	
+
 	// Call callback for successful snapshot creation
 	if m.onCreateSnapshot != nil {
 		m.onCreateSnapshot(subvolume, snapshotPath)
@@ -297,14 +300,14 @@ func (m *MockBtrfsClient) DeleteSubvolume(subvolumePath string) error {
 	if m.index >= len(m.expectedCommands) {
 		m.t.Fatalf("Unexpected btrfs delete command for: %s", subvolumePath)
 	}
-	
+
 	expected := m.expectedCommands[m.index]
 	m.index++
-	
+
 	if expected.operation != "delete" || len(expected.args) != 1 || expected.args[0] != subvolumePath {
 		m.t.Fatalf("Expected btrfs delete %s, got delete %s", expected.args[0], subvolumePath)
 	}
-	
+
 	if expected.exitCode != 0 {
 		return fmt.Errorf("btrfs command failed with exit code %d", expected.exitCode)
 	}
@@ -318,11 +321,12 @@ func (m *MockBtrfsClient) DeleteSubvolume(subvolumePath string) error {
 // were set up using Expect* methods.
 //
 // Example usage:
-//   mockRestic := NewMockResticClient(t)
-//   mockRestic.ExpectBackup("/snapshots/backup-20230101", []string{"tag1", "tag2"}, true, false, 0)
-//   mockRestic.ExpectCheck("5%", 0)
 //
-//   // Now calls to Backup() and Check() will be verified against expectations
+//	mockRestic := NewMockResticClient(t)
+//	mockRestic.ExpectBackup("/snapshots/backup-20230101", []string{"tag1", "tag2"}, true, false, 0)
+//	mockRestic.ExpectCheck("5%", 0)
+//
+//	// Now calls to Backup() and Check() will be verified against expectations
 type MockResticClient struct {
 	expectedCommands []ExpectedResticCommand
 	index            int
@@ -366,10 +370,10 @@ func (m *MockResticClient) Backup(repositoryEnv []string, snapshotPath string, t
 	if m.index >= len(m.expectedCommands) {
 		m.t.Fatalf("Unexpected restic backup command for: %s", snapshotPath)
 	}
-	
+
 	expected := m.expectedCommands[m.index]
 	m.index++
-	
+
 	if expected.operation != "backup" {
 		m.t.Fatalf("Expected restic backup operation, got %s", expected.operation)
 	}
@@ -377,7 +381,7 @@ func (m *MockResticClient) Backup(repositoryEnv []string, snapshotPath string, t
 	if expected.snapshotPath != "" && expected.snapshotPath != snapshotPath {
 		m.t.Fatalf("Expected restic backup %s, got backup %s", expected.snapshotPath, snapshotPath)
 	}
-	
+
 	if expected.exitCode != 0 {
 		return fmt.Errorf("restic command failed with exit code %d", expected.exitCode)
 	}
@@ -388,14 +392,14 @@ func (m *MockResticClient) Check(repositoryEnv []string, readDataSubset string) 
 	if m.index >= len(m.expectedCommands) {
 		m.t.Fatalf("Unexpected restic check command")
 	}
-	
+
 	expected := m.expectedCommands[m.index]
 	m.index++
-	
+
 	if expected.operation != "check" || expected.readDataSubset != readDataSubset {
 		m.t.Fatalf("Expected restic check with %s, got check with %s", expected.readDataSubset, readDataSubset)
 	}
-	
+
 	if expected.exitCode != 0 {
 		return fmt.Errorf("restic command failed with exit code %d", expected.exitCode)
 	}
@@ -417,7 +421,7 @@ func TestNewManager(t *testing.T) {
 	if !mgr.verbose {
 		t.Error("Manager verbose flag not set correctly")
 	}
-	
+
 	// Test that real implementations are used by default
 	if mgr.fs == nil {
 		t.Error("FileSystem not initialized")
@@ -437,13 +441,13 @@ func TestNewManagerWithDeps(t *testing.T) {
 		ResticRepoDir: "/tmp/repos",
 		ResticBin:     "/usr/bin/restic",
 	}
-	
+
 	mockFS := NewMockFileSystem()
 	mockBtrfs := NewMockBtrfsClient(t)
 	mockRestic := NewMockResticClient(t)
-	
+
 	mgr := NewManagerWithDeps(cfg, false, mockFS, mockBtrfs, mockRestic)
-	
+
 	if mgr.config != cfg {
 		t.Error("Manager config not set correctly")
 	}
@@ -490,7 +494,7 @@ func TestValidateEnvironment(t *testing.T) {
 		},
 		{
 			name:           "snapshot_dir_permission_denied",
-			subvolume:      "/mnt/btrfs/home", 
+			subvolume:      "/mnt/btrfs/home",
 			snapshotDirErr: os.ErrPermission,
 			btrfsExitCode:  0,
 			expectError:    false, // Non-NotExist errors are ignored
@@ -558,7 +562,7 @@ func TestCreateSnapshot(t *testing.T) {
 		mockFS := NewMockFileSystem()
 		mockBtrfs := NewMockBtrfsClient(t)
 		mockRestic := NewMockResticClient(t)
-		
+
 		// Set up callback to add file when snapshot is created successfully
 		mockBtrfs.onCreateSnapshot = func(subvolume, snapshotPath string) {
 			mockFS.AddFile(snapshotPath, []byte{})
@@ -597,7 +601,7 @@ func TestCreateSnapshot(t *testing.T) {
 		mockFS := NewMockFileSystem()
 		mockBtrfs := NewMockBtrfsClient(t)
 		mockRestic := NewMockResticClient(t)
-		
+
 		// Don't set onCreateSnapshot callback, so file won't be created
 		mockBtrfs.ExpectCreateSnapshot("", "", true, 0)
 
@@ -849,14 +853,14 @@ func TestCleanupOldSnapshots(t *testing.T) {
 	baseTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name               string
-		prefix             string
-		retention          int
-		existingSnapshots  []MockDirEntry
-		deleteFailures     []string
-		expectError        bool
-		errorContains      string
-		expectedDeletes    []string
+		name              string
+		prefix            string
+		retention         int
+		existingSnapshots []MockDirEntry
+		deleteFailures    []string
+		expectError       bool
+		errorContains     string
+		expectedDeletes   []string
 	}{
 		{
 			name:      "successful_cleanup",
@@ -907,9 +911,9 @@ func TestCleanupOldSnapshots(t *testing.T) {
 			expectError:     false,
 		},
 		{
-			name:              "filter_by_prefix",
-			prefix:            "home",
-			retention:         1,
+			name:      "filter_by_prefix",
+			prefix:    "home",
+			retention: 1,
 			existingSnapshots: []MockDirEntry{
 				{name: "home-20230101-120000", modTime: baseTime},
 				{name: "other-20230101-120000", modTime: baseTime.Add(-1 * time.Hour)},
@@ -937,7 +941,7 @@ func TestCleanupOldSnapshots(t *testing.T) {
 				}
 				snapshotPath := filepath.Join("/snapshots", snapshotName)
 				mockBtrfs.ExpectDeleteSubvolume(snapshotPath, exitCode)
-				
+
 				// Mock post-delete check
 				if exitCode == 0 {
 					mockFS.SetStatError(snapshotPath, os.ErrNotExist)
@@ -978,7 +982,7 @@ func TestRunBackup(t *testing.T) {
 
 		target := &config.TargetConfig{
 			Subvolume:     "/mnt/btrfs/home",
-			Prefix:        "home-backup", 
+			Prefix:        "home-backup",
 			Repository:    "b2-home",
 			Type:          "incremental",
 			Verify:        false,
@@ -994,7 +998,7 @@ func TestRunBackup(t *testing.T) {
 		}
 		mockFS.AddFile("/repos/b2-home", []byte("RESTIC_REPOSITORY: b2:bucket/path"))
 		mockRestic.ExpectBackup("", []string{}, true, false, 0)
-		
+
 		// Mock cleanup
 		baseTime := time.Now()
 		snapshots := []MockDirEntry{
@@ -1024,7 +1028,7 @@ func TestRunBackup(t *testing.T) {
 			Subvolume:     "/mnt/btrfs/home",
 			Prefix:        "home-backup",
 			Repository:    "b2-home",
-			Type:          "incremental", 
+			Type:          "incremental",
 			Verify:        false,
 			KeepSnapshots: 3,
 		}
@@ -1049,7 +1053,7 @@ func TestLoadRepositoryEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	cfg := &config.Config{
 		ResticRepoDir: tmpDir,
@@ -1110,7 +1114,7 @@ func TestGetSnapshotsByPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	cfg := &config.Config{
 		SnapshotDir: tmpDir,
@@ -1131,7 +1135,7 @@ func TestGetSnapshotsByPrefix(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create snapshot dir: %v", err)
 		}
-		
+
 		// Set different modification times
 		modTime := time.Now().Add(time.Duration(-i) * time.Hour)
 		err = os.Chtimes(snapshotPath, modTime, modTime)
