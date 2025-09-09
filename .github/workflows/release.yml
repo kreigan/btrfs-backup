@@ -69,4 +69,5 @@ jobs:
         with:
           hooks: goreleaser
           changelog-generator-opt: "emojis=true"
-          github-token: ${{ steps.app-token.outputs.token }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
