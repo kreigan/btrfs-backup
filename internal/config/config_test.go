@@ -4,20 +4,33 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
-func TestParseYAML(t *testing.T) {
-	yamlData := `
-target_dir: /tmp/targets
+func TestLoadConfig(t *testing.T) {
+	// Create a temporary config file
+	tmpDir, err := os.MkdirTemp("", "btrfs-backup-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configFile := filepath.Join(tmpDir, "config.yaml")
+	configData := `target_dir: /tmp/targets
 snapshot_dir: /tmp/snapshots
 restic_repo_dir: /tmp/repos
 restic_bin: /usr/bin/restic
 `
-
-	var config Config
-	err := parseYAML([]byte(yamlData), &config)
+	err = os.WriteFile(configFile, []byte(configData), 0644)
 	if err != nil {
-		t.Fatalf("parseYAML failed: %v", err)
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Test loading the config
+	config, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
 	}
 
 	if config.TargetDir != "/tmp/targets" {
@@ -34,20 +47,70 @@ restic_bin: /usr/bin/restic
 	}
 }
 
-func TestParseTargetYAML(t *testing.T) {
-	yamlData := `
-subvolume: /mnt/btrfs/home
+func TestLoadConfigWithEnvironmentVariables(t *testing.T) {
+	// Set environment variables
+	os.Setenv("BTRFSBACKUP_TARGET_DIR", "/env/targets")
+	os.Setenv("BTRFSBACKUP_SNAPSHOT_DIR", "/env/snapshots")
+	defer os.Unsetenv("BTRFSBACKUP_TARGET_DIR")
+	defer os.Unsetenv("BTRFSBACKUP_SNAPSHOT_DIR")
+
+	// Create a temporary config file with some values
+	tmpDir, err := os.MkdirTemp("", "btrfs-backup-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configFile := filepath.Join(tmpDir, "config.yaml")
+	configData := `target_dir: /file/targets
+snapshot_dir: /file/snapshots
+restic_repo_dir: /tmp/repos
+restic_bin: /usr/bin/restic
+`
+	err = os.WriteFile(configFile, []byte(configData), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	config, err := LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	// Environment variables should override file values
+	if config.TargetDir != "/env/targets" {
+		t.Errorf("Expected TargetDir from env '/env/targets', got '%s'", config.TargetDir)
+	}
+	if config.SnapshotDir != "/env/snapshots" {
+		t.Errorf("Expected SnapshotDir from env '/env/snapshots', got '%s'", config.SnapshotDir)
+	}
+}
+
+func TestLoadTargetConfig(t *testing.T) {
+	// Create a temporary target config file
+	tmpDir, err := os.MkdirTemp("", "btrfs-backup-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	targetFile := filepath.Join(tmpDir, "target.yaml")
+	targetData := `subvolume: /mnt/btrfs/home
 prefix: home-backup
 repository: b2-home
 type: incremental
 verify: true
 keep_snapshots: 5
 `
-
-	var target TargetConfig
-	err := parseTargetYAML([]byte(yamlData), &target)
+	err = os.WriteFile(targetFile, []byte(targetData), 0644)
 	if err != nil {
-		t.Fatalf("parseTargetYAML failed: %v", err)
+		t.Fatalf("Failed to write target file: %v", err)
+	}
+
+	// Test loading the target config
+	target, err := LoadTargetConfig(targetFile)
+	if err != nil {
+		t.Fatalf("LoadTargetConfig failed: %v", err)
 	}
 
 	if target.Subvolume != "/mnt/btrfs/home" {
@@ -70,24 +133,62 @@ keep_snapshots: 5
 	}
 }
 
-func TestParseInt(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected int
-	}{
-		{"123", 123},
-		{"0", 0},
-		{"5", 5},
-		{"abc", -1},
-		{"12abc", -1},
-		{"", 0},
+func TestLoadTargetConfigWithDefaults(t *testing.T) {
+	// Create a minimal target config file
+	tmpDir, err := os.MkdirTemp("", "btrfs-backup-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	targetFile := filepath.Join(tmpDir, "target.yaml")
+	targetData := `subvolume: /mnt/btrfs/home
+prefix: home-backup  
+repository: b2-home
+`
+	err = os.WriteFile(targetFile, []byte(targetData), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write target file: %v", err)
 	}
 
-	for _, test := range tests {
-		result := parseInt(test.input)
-		if result != test.expected {
-			t.Errorf("parseInt(%q) = %d, expected %d", test.input, result, test.expected)
-		}
+	target, err := LoadTargetConfig(targetFile)
+	if err != nil {
+		t.Fatalf("LoadTargetConfig failed: %v", err)
+	}
+
+	// Check that defaults are applied
+	if target.Type != "incremental" {
+		t.Errorf("Expected default Type 'incremental', got '%s'", target.Type)
+	}
+	if target.KeepSnapshots != 3 {
+		t.Errorf("Expected default KeepSnapshots 3, got %d", target.KeepSnapshots)
+	}
+	if target.Verify != false {
+		t.Errorf("Expected default Verify false, got %v", target.Verify)
+	}
+}
+
+func TestSetConfigDefaults(t *testing.T) {
+	v := viper.New()
+	setConfigDefaults(v)
+
+	if v.GetString("restic_bin") != "/usr/bin/restic" {
+		t.Errorf("Expected default restic_bin '/usr/bin/restic', got '%s'", v.GetString("restic_bin"))
+	}
+}
+
+func TestSetTargetDefaults(t *testing.T) {
+	v := viper.New()
+	setTargetDefaults(v)
+
+	if v.GetString("type") != "incremental" {
+		t.Errorf("Expected default type 'incremental', got '%s'", v.GetString("type"))
+	}
+	if v.GetInt("keep_snapshots") != 3 {
+		t.Errorf("Expected default keep_snapshots 3, got %d", v.GetInt("keep_snapshots"))
+	}
+	if v.GetBool("verify") != false {
+		t.Errorf("Expected default verify false, got %v", v.GetBool("verify"))
 	}
 }
 
@@ -156,23 +257,6 @@ func TestValidateTargetConfig(t *testing.T) {
 	err = validateTargetConfig(invalidTarget)
 	if err == nil {
 		t.Error("validateTargetConfig should have failed for negative keep_snapshots")
-	}
-}
-
-func TestSetTargetDefaults(t *testing.T) {
-	target := &TargetConfig{
-		Subvolume:  "/mnt/btrfs/home",
-		Prefix:     "home-backup",
-		Repository: "b2-home",
-	}
-
-	setTargetDefaults(target)
-
-	if target.Type != "incremental" {
-		t.Errorf("Expected default Type 'incremental', got '%s'", target.Type)
-	}
-	if target.KeepSnapshots != 3 {
-		t.Errorf("Expected default KeepSnapshots 3, got %d", target.KeepSnapshots)
 	}
 }
 
