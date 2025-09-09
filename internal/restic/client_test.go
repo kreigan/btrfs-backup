@@ -8,6 +8,7 @@ func TestNewDefaultClient(t *testing.T) {
 	client := NewDefaultClient("/usr/bin/restic")
 	if client == nil {
 		t.Error("NewDefaultClient should return a non-nil client")
+		return
 	}
 	if client.resticBin != "/usr/bin/restic" {
 		t.Errorf("Expected resticBin '/usr/bin/restic', got '%s'", client.resticBin)

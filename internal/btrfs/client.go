@@ -13,8 +13,8 @@ type Client interface {
 }
 
 type BtrfsCommand struct {
-	Name string
-	Args []string
+	Name      string
+	Args      []string
 	RunAsSudo bool
 }
 
@@ -32,14 +32,14 @@ func (c *BtrfsCommand) Exec(args ...string) error {
 // DefaultClient is the production implementation of the Client interface
 // that executes actual BTRFS commands using sudo.
 type DefaultClient struct {
-	btrfsBin string
+	btrfsBin  string
 	runAsSudo bool
 }
 
 func (c *DefaultClient) Exec(args ...string) error {
 	command := &BtrfsCommand{
-		Name: c.btrfsBin,
-		Args: args,
+		Name:      c.btrfsBin,
+		Args:      args,
 		RunAsSudo: c.runAsSudo,
 	}
 	return command.Exec()
@@ -47,8 +47,8 @@ func (c *DefaultClient) Exec(args ...string) error {
 
 // NewDefaultClient creates a new DefaultClient instance.
 func NewDefaultClient() *DefaultClient {
-	return &DefaultClient {
-		btrfsBin: "btrfs",
+	return &DefaultClient{
+		btrfsBin:  "btrfs",
 		runAsSudo: true,
 	}
 }

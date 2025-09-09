@@ -2,6 +2,13 @@
 
 A Go implementation of BTRFS backup script that creates snapshots and backs them up using Restic.
 
+## Requirements
+
+- **Linux only** - This tool works exclusively on Linux systems with BTRFS support
+- **BTRFS filesystem** - Source directories must be on BTRFS filesystems  
+- **Restic** - Must be installed and accessible (usually `/usr/bin/restic`)
+- **Root/sudo access** - Required for creating BTRFS snapshots
+
 ## Features
 
 - Creates read-only BTRFS snapshots
@@ -10,12 +17,38 @@ A Go implementation of BTRFS backup script that creates snapshots and backs them
 - Optional repository verification
 - Support for both JSON and YAML configuration files
 - Comprehensive logging and error handling
-- No external dependencies (uses Go standard library only)
+- Built with modern Go libraries (Cobra for CLI, Viper for configuration)
 
 ## Installation
 
+### Pre-built Binaries (Recommended)
+
+Download the latest release from [GitHub Releases](https://github.com/kreigan/btrfs-backup/releases):
+
 ```bash
-go build -o btrfs-backup
+# Linux x86_64
+wget https://github.com/kreigan/btrfs-backup/releases/latest/download/btrfs-backup-linux-amd64
+chmod +x btrfs-backup-linux-amd64
+sudo mv btrfs-backup-linux-amd64 /usr/local/bin/btrfs-backup
+
+# Linux ARM64
+wget https://github.com/kreigan/btrfs-backup/releases/latest/download/btrfs-backup-linux-arm64  
+chmod +x btrfs-backup-linux-arm64
+sudo mv btrfs-backup-linux-arm64 /usr/local/bin/btrfs-backup
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/kreigan/btrfs-backup.git
+cd btrfs-backup
+make build
+```
+
+### Using Go
+
+```bash
+go install github.com/kreigan/btrfs-backup/cmd/btrfs-backup@latest
 ```
 
 ## Usage
@@ -131,10 +164,41 @@ btrfs-backup backup my-target -t /path/to/target.yaml
 - Snapshot cleanup failures are logged as warnings but don't fail the backup
 - Failed snapshots are kept for investigation when backup operations fail
 
-## Testing
+## Development
+
+### Prerequisites
+
+- Go 1.25.1 or later
+- [golangci-lint](https://golangci-lint.run/) for linting
+- [GoReleaser](https://goreleaser.com/) for releases (optional)
+
+### Building
 
 ```bash
-go test -v
+# Build the binary
+make build
+
+# Build and run
+make run
+
+# Install to $GOPATH/bin
+make install
+```
+
+### Testing and Linting
+
+```bash
+# Run linting (includes go vet, gofmt, and golangci-lint)
+make lint
+
+# Run tests (automatically runs linting first)
+make test
+
+# Run tests only
+go test -v ./...
+
+# Clean build artifacts
+make clean
 ```
 
 The test suite includes:
@@ -143,3 +207,51 @@ The test suite includes:
 - Command building
 - Environment variable handling
 - Snapshot listing and sorting
+- Backup workflow simulation with mocked dependencies
+
+### Code Quality
+
+This project uses:
+- **golangci-lint** for comprehensive static analysis
+- **gofmt** for code formatting
+- **go vet** for additional checks
+- Conventional commits for automated releases
+
+## CI/CD and Releases
+
+This project uses automated releases via GitHub Actions:
+
+- **Automated Releases**: Pushes to `main`/`master` branch trigger automatic version bumps and releases based on conventional commit messages
+- **Semantic Versioning**: Version numbers follow semantic versioning (major.minor.patch)
+- **Cross-platform Builds**: Releases include Linux binaries for both AMD64 and ARM64 architectures
+- **Changelog Generation**: Release notes are automatically generated from commit messages
+
+### Commit Message Format
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+```bash
+# Patch release (x.x.1)
+fix: correct backup verification logic
+
+# Minor release (x.1.0) 
+feat: add new retry mechanism for failed backups
+
+# Major release (1.0.0)
+feat!: change configuration file format
+
+# or with BREAKING CHANGE footer
+feat: add new configuration options
+
+BREAKING CHANGE: configuration file structure has changed
+```
+
+### Release Process
+
+1. Push commits to `main` branch using conventional commit messages
+2. GitHub Actions automatically:
+   - Runs linting and tests
+   - Determines next version number
+   - Creates GitHub release with changelog
+   - Builds and attaches Linux binaries (AMD64/ARM64)
+   - Generates checksums for verification

@@ -14,7 +14,8 @@ import (
 	"btrfs-backup/internal/config"
 )
 
-const version = "0.1.0"
+// version is set at build time via ldflags
+var version = "dev"
 
 var (
 	configFile string
@@ -48,14 +49,14 @@ func createRootCmd() *cobra.Command {
 	}
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", 
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "",
 		"config file path (default: $HOME/.config/btrfs-backup/config.yaml)")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, 
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false,
 		"enable debug logging")
 
 	// Bind flags to viper for configuration integration
-	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+	_ = viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
+	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 
 	// Add subcommands
 	rootCmd.AddCommand(createVersionCmd())
@@ -78,7 +79,7 @@ func createVersionCmd() *cobra.Command {
 // createBackupCmd creates the backup subcommand
 func createBackupCmd() *cobra.Command {
 	var targetConfigPath string
-	
+
 	backupCmd := &cobra.Command{
 		Use:   "backup <target-name>",
 		Short: "Perform backup operation",
@@ -91,7 +92,7 @@ func createBackupCmd() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			targetName := args[0]
-			
+
 			// Determine config path
 			finalConfigPath := config.GetConfigPath(configFile)
 			if verbose {
@@ -129,12 +130,11 @@ func createBackupCmd() *cobra.Command {
 	}
 
 	// Backup-specific flags
-	backupCmd.Flags().StringVarP(&targetConfigPath, "target-config", "t", "", 
+	backupCmd.Flags().StringVarP(&targetConfigPath, "target-config", "t", "",
 		"path to target configuration file")
 
 	return backupCmd
 }
-
 
 func runBackup(targetName string, cfg *config.Config, target *config.TargetConfig, verbose bool) error {
 	log.Printf("=== Starting BTRFS backup process for target: %s ===", targetName)
@@ -145,7 +145,7 @@ func runBackup(targetName string, cfg *config.Config, target *config.TargetConfi
 	log.Printf("Keep snapshots: %d", target.KeepSnapshots)
 
 	mgr := backup.NewManager(cfg, verbose)
-	
+
 	// Step 1: Environment validation
 	log.Println("Validating backup environment")
 	err := validateEnvironmentWithLogging(mgr, target.Subvolume, cfg)
@@ -200,21 +200,21 @@ func runBackup(targetName string, cfg *config.Config, target *config.TargetConfi
 }
 
 // Helper functions that call manager methods but handle CLI-specific logging
-func validateEnvironmentWithLogging(mgr *backup.Manager, subvolume string, cfg *config.Config) error {
+func validateEnvironmentWithLogging(mgr *backup.Manager, subvolume string, _ *config.Config) error {
 	// This would call individual validation steps from the manager
 	// For now, we'll use a simplified approach
 	return mgr.ValidateEnvironment(subvolume)
 }
 
-func createSnapshotWithLogging(mgr *backup.Manager, subvolume, prefix string, verbose bool) (string, error) {
+func createSnapshotWithLogging(mgr *backup.Manager, subvolume, prefix string, _ bool) (string, error) {
 	return mgr.CreateSnapshot(subvolume, prefix)
 }
 
-func performBackupWithLogging(mgr *backup.Manager, snapshotPath string, target *config.TargetConfig, verbose bool) error {
+func performBackupWithLogging(mgr *backup.Manager, snapshotPath string, target *config.TargetConfig, _ bool) error {
 	return mgr.PerformBackup(snapshotPath, target)
 }
 
-func verifyRepositoryWithLogging(mgr *backup.Manager, repository string, verbose bool) error {
+func verifyRepositoryWithLogging(mgr *backup.Manager, repository string, _ bool) error {
 	return mgr.VerifyRepository(repository)
 }
 

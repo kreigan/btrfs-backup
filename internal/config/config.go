@@ -15,21 +15,21 @@ import (
 // Config represents the main btrfs-backup configuration containing
 // paths to directories and executables needed for backup operations.
 type Config struct {
-	TargetDir     string `json:"target_dir" yaml:"target_dir" mapstructure:"target_dir"`         // Directory containing target configuration files
-	SnapshotDir   string `json:"snapshot_dir" yaml:"snapshot_dir" mapstructure:"snapshot_dir"`     // Directory where BTRFS snapshots are created
+	TargetDir     string `json:"target_dir" yaml:"target_dir" mapstructure:"target_dir"`                // Directory containing target configuration files
+	SnapshotDir   string `json:"snapshot_dir" yaml:"snapshot_dir" mapstructure:"snapshot_dir"`          // Directory where BTRFS snapshots are created
 	ResticRepoDir string `json:"restic_repo_dir" yaml:"restic_repo_dir" mapstructure:"restic_repo_dir"` // Directory containing Restic repository configurations
-	ResticBin     string `json:"restic_bin" yaml:"restic_bin" mapstructure:"restic_bin"`         // Path to the Restic binary
+	ResticBin     string `json:"restic_bin" yaml:"restic_bin" mapstructure:"restic_bin"`                // Path to the Restic binary
 }
 
 // TargetConfig represents configuration for a specific backup target,
 // defining the source subvolume, backup settings, and retention policy.
 type TargetConfig struct {
-	Subvolume     string `json:"subvolume" yaml:"subvolume" mapstructure:"subvolume"`             // BTRFS subvolume to backup
-	Prefix        string `json:"prefix" yaml:"prefix" mapstructure:"prefix"`                   // Prefix for snapshot names
-	Repository    string `json:"repository" yaml:"repository" mapstructure:"repository"`           // Restic repository identifier
-	Type          string `json:"type" yaml:"type" mapstructure:"type"`                       // Backup type: "incremental" or "full"
-	Verify        bool   `json:"verify" yaml:"verify" mapstructure:"verify"`                   // Whether to verify repository after backup
-	KeepSnapshots int    `json:"keep_snapshots" yaml:"keep_snapshots" mapstructure:"keep_snapshots"`   // Number of local snapshots to retain
+	Subvolume     string `json:"subvolume" yaml:"subvolume" mapstructure:"subvolume"`                // BTRFS subvolume to backup
+	Prefix        string `json:"prefix" yaml:"prefix" mapstructure:"prefix"`                         // Prefix for snapshot names
+	Repository    string `json:"repository" yaml:"repository" mapstructure:"repository"`             // Restic repository identifier
+	Type          string `json:"type" yaml:"type" mapstructure:"type"`                               // Backup type: "incremental" or "full"
+	Verify        bool   `json:"verify" yaml:"verify" mapstructure:"verify"`                         // Whether to verify repository after backup
+	KeepSnapshots int    `json:"keep_snapshots" yaml:"keep_snapshots" mapstructure:"keep_snapshots"` // Number of local snapshots to retain
 }
 
 // GetConfigPath determines the main configuration file path using the following priority:
@@ -83,15 +83,15 @@ func GetTargetConfigPath(provided, targetDir, targetName string) string {
 // Returns a validated Config struct or an error if loading/validation fails.
 func LoadConfig(path string) (*Config, error) {
 	v := viper.New()
-	
+
 	// Set up environment variables
 	v.SetEnvPrefix("BTRFSBACKUP")
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	
+
 	// Set defaults
 	setConfigDefaults(v)
-	
+
 	// Configure file path
 	if path != "" {
 		v.SetConfigFile(path)
@@ -101,24 +101,24 @@ func LoadConfig(path string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get home directory: %w", err)
 		}
-		
+
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(filepath.Join(home, ".config", "btrfs-backup"))
 		v.AddConfigPath(".")
 	}
-	
+
 	// Read the configuration
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
-	
+
 	// Unmarshal into struct
 	var config Config
 	if err := v.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
-	
+
 	// Validate
 	if err := validateConfig(&config); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
@@ -132,29 +132,29 @@ func LoadConfig(path string) (*Config, error) {
 // Returns a validated TargetConfig struct or an error if loading/validation fails.
 func LoadTargetConfig(path string) (*TargetConfig, error) {
 	v := viper.New()
-	
+
 	// Set up environment variables (target-specific ones can use TARGET_ prefix)
 	v.SetEnvPrefix("BTRFSBACKUP_TARGET")
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	
+
 	// Set defaults
 	setTargetDefaults(v)
-	
+
 	// Configure file path
 	v.SetConfigFile(path)
-	
+
 	// Read the configuration
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read target config file: %w", err)
 	}
-	
+
 	// Unmarshal into struct
 	var target TargetConfig
 	if err := v.Unmarshal(&target); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal target config: %w", err)
 	}
-	
+
 	// Validate
 	if err := validateTargetConfig(&target); err != nil {
 		return nil, fmt.Errorf("invalid target configuration: %w", err)
@@ -168,7 +168,7 @@ func setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("restic_bin", "/usr/bin/restic")
 }
 
-// setTargetDefaults sets default values for target configuration using Viper  
+// setTargetDefaults sets default values for target configuration using Viper
 func setTargetDefaults(v *viper.Viper) {
 	v.SetDefault("type", "incremental")
 	v.SetDefault("keep_snapshots", 3)
@@ -213,4 +213,3 @@ func validateTargetConfig(target *TargetConfig) error {
 
 	return nil
 }
-
