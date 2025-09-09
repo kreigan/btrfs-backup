@@ -4,7 +4,8 @@ name: Release
 
 "on":
   push:
-    branches: [main, master]
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches: [main, master]
 
@@ -51,6 +52,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
